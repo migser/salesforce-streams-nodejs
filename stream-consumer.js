@@ -6,6 +6,7 @@ const {
 
 const salesforceStreams = require('./lib/salesforce-streams');
 const fetchSalesforceDetails = require('./lib/fetch-salesforce-details');
+const publishKafka = require('./lib/publish-kafka-msg');
 
 console.log('-----> Initializing worker');
 
@@ -32,6 +33,7 @@ console.log('Esperando Mensajes!');
 // For each incoming message:
 const messageCallback = (message, salesforceApi) => {
   console.error(`Recibido mensaje:${message}`);
+  publishKafka(message, 'CDC');
   const redisMulti = redisClient.multi();
   const execMultiAsync = promisify(redisMulti.exec).bind(redisMulti);
   // Populate more details of the message (like User name & Account name)
