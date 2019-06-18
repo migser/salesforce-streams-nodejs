@@ -33,7 +33,7 @@ console.log('Esperando Mensajes!');
 // For each incoming message:
 const messageCallback = (message, salesforceApi) => {
   console.error(`Recibido mensaje:${message}`);
-  const resultado = JSON.stringify(publishKafka('message', 'CDC'));
+  const resultado = JSON.stringify(publishKafka(message, 'CDC'));
   console.error(`Resuñtado de kafka publish: ${resultado}`);
   const redisMulti = redisClient.multi();
   const execMultiAsync = promisify(redisMulti.exec).bind(redisMulti);
