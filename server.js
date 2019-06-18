@@ -1,17 +1,20 @@
-const express  = require('express');
-const next     = require('next');
-const path     = require('path');
-const url      = require('url');
-const cluster  = require('cluster');
-const numCPUs  = require('os').cpus().length;
-const redis    = require('redis');
+const express = require('express');
+const next = require('next');
+const path = require('path');
+const url = require('url');
+const cluster = require('cluster');
+const numCPUs = require('os').cpus().length;
+const redis = require('redis');
 
 const redisHeartbeat = require('./lib/redis-heartbeat');
 
 require('dotenv').config()
+
 const dev = process.env.NODE_ENV !== 'production';
 const port = process.env.PORT || 3000;
-const REDIS_URL = process.env.REDIS_URL;
+const {
+  REDIS_URL
+} = process.env;
 if (REDIS_URL == null) {
   throw new Error('Requires REDIS_URL env var.');
 }
@@ -21,11 +24,11 @@ const heartbeatSecs = 5;
 if (!dev && cluster.isMaster) {
   // In production, heartbeat in the master process.
   redisHeartbeat(REDIS_URL, heartbeatSecs);
-  
+
   console.log(`Node cluster master ${process.pid} is running`);
 
   // Fork workers.
-  for (let i = 0; i < numCPUs; i++) {
+  for (let i = 0; i < numCPUs; i += 1) {
     cluster.fork();
   }
 
@@ -34,7 +37,10 @@ if (!dev && cluster.isMaster) {
   });
 
 } else {
-  const nextApp = next({ dir: '.', dev });
+  const nextApp = next({
+    dir: '.',
+    dev
+  });
   const nextHandler = nextApp.getRequestHandler();
 
   console.log('-----> Initializing server');
@@ -48,21 +54,22 @@ if (!dev && cluster.isMaster) {
         redisHeartbeat(REDIS_URL, heartbeatSecs);
       } else {
         // Enforce SSL & HSTS in production
-        server.use(function(req, res, next) {
-          var proto = req.headers["x-forwarded-proto"];
+        // eslint-disable-next-line no-shadow, consistent-return
+        server.use((req, res, next) => {
+          const proto = req.headers["x-forwarded-proto"];
           if (proto === "https") {
             res.set({
               'Strict-Transport-Security': 'max-age=31557600' // one-year
             });
             return next();
           }
-          res.redirect("https://" + req.headers.host + req.url);
+          res.redirect(`https://${  req.headers.host  }${req.url}`);
         });
       }
 
       // Setup Redis datastore to receive messages
       const redisStream = redis.createClient(REDIS_URL);
-      redisStream.on("error", function (err) {
+      redisStream.on("error", (err) => {
         console.error(`redis stream error: ${err.stack}`);
         process.exit(1);
       });
@@ -70,19 +77,20 @@ if (!dev && cluster.isMaster) {
 
       // Setup Redis datastore to perform queries (separate from subscriber)
       const redisQuery = redis.createClient(REDIS_URL);
-      redisQuery.on("error", function (err) {
+      redisQuery.on("error", (err) => {
         console.error(`redis query error: ${err.stack}`);
         process.exit(1);
       });
-      
+
       // Static files
       // https://github.com/zeit/next.js/tree/4.2.3#user-content-static-file-serving-eg-images
       server.use('/static', express.static(path.join(__dirname, 'static'), {
         maxAge: dev ? '0' : '365d'
       }));
-    
+
       // Server-Sent Events (SSE) handler to push messages to browser clients
       // https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events
+      // eslint-disable-next-line no-shadow
       server.get('/stream/messages', (req, res, next) => {
         req.socket.setTimeout(0);
         const idPrefix = req.headers['x-request-id'] || 'message';
@@ -99,7 +107,7 @@ if (!dev && cluster.isMaster) {
         // Send all status info buffered in Redis
         redisQuery.get('status-recent', (err, response) => {
           if (err) throw err;
-          messageCount++;
+          messageCount += 1;
           res.write(`event: status\n`);
           res.write(`id: ${idPrefix}-${messageCount}\n`);
           res.write(`data: ${response}\n`);
@@ -110,8 +118,8 @@ if (!dev && cluster.isMaster) {
         redisQuery.lrange('salesforce-recent', 0, -1, (err, response) => {
           if (err) throw err;
           response.reverse();
-          response.forEach( message => {
-            messageCount++;
+          response.forEach(message => {
+            messageCount += 1;
             res.write(`event: salesforce\n`);
             res.write(`id: ${idPrefix}-${messageCount}\n`);
             res.write(`data: ${message}\n`);
@@ -120,8 +128,8 @@ if (!dev && cluster.isMaster) {
         });
 
         // Send each new message as it arrives
-        redisStream.on("message", function (channel, message) {
-          messageCount++;
+        redisStream.on("message", (channel, message) => {
+          messageCount += 1;
           res.write(`event: ${channel}\n`);
           res.write(`id: ${idPrefix}-${messageCount}\n`);
           res.write(`data: ${message}\n`);
@@ -148,7 +156,7 @@ if (!dev && cluster.isMaster) {
         console.log(`Listening on http://localhost:${port}`);
       });
     })
-    .catch( err => {
+    .catch(err => {
       console.error(err);
       process.exit(1);
     });
